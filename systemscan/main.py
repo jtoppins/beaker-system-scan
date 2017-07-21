@@ -34,6 +34,7 @@ import glob
 from subprocess import Popen, PIPE
 from lxml import etree
 from procfs import procfs
+import datetime
 
 USAGE_TEXT = """
 Usage:  beaker-system-scan [-d] [-j] [[-h <HOSTNAME>] [-S server]]
@@ -293,6 +294,13 @@ def read_inventory(inventory, arch = None, proc_cpuinfo='/proc/cpuinfo'):
        if desc is not None and desc.text.lower() == 'system memory':
           memoryinfo = m
 
+    # system firmware info
+    sysfwinfo = inventory.xpath('.//node[@id="firmware"]')[0]
+    date = [int(x) for x in (sysfwinfo.findtext('date').split('/'))]
+    sysfw_date = datetime.date(date[2], date[0], date[1])
+    data['SystemFirmware'] = dict(sysfw_version=sysfwinfo.findtext('version'),
+                                  sysfw_date=sysfw_date.isoformat())
+
     devices = inventory.xpath(".//node[@id!='subsystem']")
     capabilities = cpuinfo.find('capabilities')
     if capabilities is not None:
@@ -491,7 +499,7 @@ def read_inventory(inventory, arch = None, proc_cpuinfo='/proc/cpuinfo'):
 
     for device in devices:
         # Defaults for nonexistent values
-        description = driver = bus = device_class = "Unknown"
+        description = driver = bus = device_class = firmware = "Unknown"
         vendorID = deviceID = subsysVendorID = subsysDeviceID = "0000"
 
         if device.findtext('product'):
@@ -576,6 +584,10 @@ def read_inventory(inventory, arch = None, proc_cpuinfo='/proc/cpuinfo'):
             device_type = 'VIDEO'
         elif device_class == 'multimedia':
             device_type = 'AUDIO'
+        elif device_class == 'network':
+            firmwarenode = device.find('configuration/setting[@id="firmware"]')
+            if firmwarenode is not None:
+                firmware = firmwarenode.get('value')
 
         data['Devices'].append(dict( vendorID = vendorID,
                                      deviceID = deviceID,
@@ -584,7 +596,8 @@ def read_inventory(inventory, arch = None, proc_cpuinfo='/proc/cpuinfo'):
                                      bus = bus,
                                      driver = driver,
                                      type = device_type,
-                                     description = description))
+                                     description = description,
+                                     fw_version = firmware))
 
     return data
 
